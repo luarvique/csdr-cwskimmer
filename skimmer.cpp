@@ -52,6 +52,15 @@ int main(int argc, char *argv[])
       case 'f':
         use16bit = false;
         break;
+      case 'h':
+        fprintf(stderr, "CSDR-Based CW Skimmer by Marat Fayzullin\n");
+        fprintf(stderr, "Usage: %s [options]\n", argv[0]);
+        fprintf(stderr, "  -r <rate>  -- Use given sampling rate.\n");
+        fprintf(stderr, "  -n <chars> -- Number of characters to print.\n");
+        fprintf(stderr, "  -i         -- Use 16bit signed integer input.\n");
+        fprintf(stderr, "  -f         -- Use 32bit floating point input.\n");
+        fprintf(stderr, "  -h         -- Print this help message.\n");
+        return(0);
       default:
         break;
     }
