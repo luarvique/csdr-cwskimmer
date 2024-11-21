@@ -5,22 +5,16 @@
 #include <string.h>
 #include <math.h>
 
-#define MAX_CHANNELS (64)
-#define MAX_INPUT    (MAX_CHANNELS*4)
+#define MAX_CHANNELS (sampleRate/2/100)
+#define MAX_INPUT    (MAX_CHANNELS*2)
 #define INPUT_STEP   (MAX_INPUT)//MAX_INPUT/4)
-
-Csdr::Ringbuffer<float> *in[MAX_CHANNELS];
-Csdr::RingbufferReader<float> *in_reader[MAX_CHANNELS];
-Csdr::Ringbuffer<unsigned char> *out[MAX_CHANNELS];
-Csdr::RingbufferReader<unsigned char> *out_reader[MAX_CHANNELS];
-Csdr::CwDecoder<float> *cw[MAX_CHANNELS];
 
 unsigned int bufSize = 1024;
 unsigned int sampleRate = 48000;
 unsigned int charCount = 8;
 bool use16bit = false;
 bool showCw = false;
-
+bool showDbg = false;
 
 int main(int argc, char *argv[])
 {
@@ -52,6 +46,9 @@ int main(int argc, char *argv[])
       case 'f':
         use16bit = false;
         break;
+      case 'd':
+        showDbg = true;
+        break;
       case 'h':
         fprintf(stderr, "CSDR-Based CW Skimmer by Marat Fayzullin\n");
         fprintf(stderr, "Usage: %s [options]\n", argv[0]);
@@ -59,12 +56,19 @@ int main(int argc, char *argv[])
         fprintf(stderr, "  -n <chars> -- Number of characters to print.\n");
         fprintf(stderr, "  -i         -- Use 16bit signed integer input.\n");
         fprintf(stderr, "  -f         -- Use 32bit floating point input.\n");
+        fprintf(stderr, "  -d         -- Print debug information.\n");
         fprintf(stderr, "  -h         -- Print this help message.\n");
         return(0);
       default:
         break;
     }
   }
+
+  Csdr::Ringbuffer<float> *in[MAX_CHANNELS];
+  Csdr::RingbufferReader<float> *in_reader[MAX_CHANNELS];
+  Csdr::Ringbuffer<unsigned char> *out[MAX_CHANNELS];
+  Csdr::RingbufferReader<unsigned char> *out_reader[MAX_CHANNELS];
+  Csdr::CwDecoder<float> *cw[MAX_CHANNELS];
 
   for(j=0 ; j<MAX_CHANNELS ; ++j)
   {
@@ -82,7 +86,7 @@ int main(int argc, char *argv[])
   float *fftIn = new float[MAX_INPUT];
   fftwf_plan fft = fftwf_plan_dft_r2c_1d(MAX_INPUT, fftIn, fftOut, FFTW_ESTIMATE);
 
-  for(remains=0, avgPower=0.0 ; ; )
+  for(remains=0, avgPower=1.0 ; ; )
   {
     if(!use16bit)
     {
@@ -95,7 +99,7 @@ int main(int argc, char *argv[])
       if(n!=MAX_INPUT-remains) break;
       // Expand shorts to floats, normalizing them to [-1;1) range
       for(j=remains ; j<MAX_INPUT ; ++j)
-        fftIn[j] = (fftIn[j] + (float)(dataIn[j]) / 32768.0) / 2.0;
+        fftIn[j] = (float)dataIn[j] / 32768.0;
     }
 
     // Compute FFT
@@ -116,12 +120,12 @@ int main(int argc, char *argv[])
     }
 
     // Filter out spurs
-    fftOut[MAX_INPUT/2-1][0] = 0.5 * fftOut[MAX_INPUT/2-2][1] + fftOut[MAX_INPUT/2-1][1];
-    fftOut[0][0] = fftOut[0][1] + 0.5 * fftOut[1][1];
+    fftOut[MAX_INPUT/2-1][0] = (0.5 * fftOut[MAX_INPUT/2-2][1] + fftOut[MAX_INPUT/2-1][1]) / 1.5;
+    fftOut[0][0] = (fftOut[0][1] + 0.5 * fftOut[1][1]) / 1.5;
     accPower = fftOut[0][0] + fftOut[MAX_INPUT/2-1][0];
     for(j=1 ; j<MAX_INPUT/2-1 ; ++j)
     {
-      fftOut[j][0] = fftOut[j][1] + 0.5 * (fftOut[j-1][1] + fftOut[j+1][1]);
+      fftOut[j][0] = (fftOut[j][1] + 0.5 * (fftOut[j-1][1] + fftOut[j+1][1])) / 2.0;
       accPower += fftOut[j][0];
     }
 
@@ -182,7 +186,7 @@ int main(int argc, char *argv[])
 
     // Print debug information to the stderr
     diag[i] = '\0';
-//    fprintf(stderr, "%s (%.2f - %d)\n", diag, avgPower, chrCount);
+    if(showDbg) fprintf(stderr, "%s (%.2f - %d)\n", diag, avgPower, chrCount);
   }
 
   // Final printout
