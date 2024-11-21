@@ -58,11 +58,19 @@ int main(int argc, char *argv[])
     if(argv[j][0]!='-')
     {
       // First two non-option arguments are filenames
-      if(!inName) inName = argv[j]; else if(!outName) outName = argv[j];
+      if(!inName) inName = argv[j];
+      else if(!outName) outName = argv[j];
+      else
+      {
+        fprintf(stderr, "%s: Excessive file name '%s'!\n", argv[0], argv[j]);
+        return(2);
+      }
     }
     else if(strlen(argv[j])!=2)
     {
       // Single-letter options only!
+      fprintf(stderr, "%s: Unrecognized option '%s'!\n", argv[0], argv[j]);
+      return(2);
     }
     else switch(argv[j][1])
     {
@@ -98,7 +106,8 @@ int main(int argc, char *argv[])
         fprintf(stderr, "  -h         -- Print this help message.\n");
         return(0);
       default:
-        break;
+        fprintf(stderr, "%s: Unrecognized option '%s'!\n", argv[0], argv[j]);
+        return(2);
     }
   }
 
