@@ -1,0 +1,13 @@
+Source: csdr-cwskimmer
+Maintainer: Marat Fayzullin <luarvique@gmail.com>
+Section: hamradio
+Priority: optional
+Rules-Requires-Root: no
+Standards-Version: 4.3.0
+Build-Depends: debhelper (>= 12), libfftw3-dev (>= 3.3), libcsdr-dev (>= 0.18.18)
+
+Package: csdr-cwskimmer
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: RDS decoder
+ Command line CW skimmer based on the CSDR signal processing library.
