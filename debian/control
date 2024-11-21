@@ -4,7 +4,7 @@ Section: hamradio
 Priority: optional
 Rules-Requires-Root: no
 Standards-Version: 4.3.0
-Build-Depends: debhelper (>= 12), libfftw3-dev (>= 3.3), libcsdr-dev (>= 0.18.18)
+Build-Depends: debhelper (>= 10), libfftw3-dev (>= 3.3), libcsdr-dev (>= 0.18.18)
 
 Package: csdr-cwskimmer
 Architecture: any
