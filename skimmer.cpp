@@ -120,12 +120,12 @@ int main(int argc, char *argv[])
     }
 
     // Filter out spurs
-    fftOut[MAX_INPUT/2-1][0] = (0.5 * fftOut[MAX_INPUT/2-2][1] + fftOut[MAX_INPUT/2-1][1]) / 1.5;
-    fftOut[0][0] = (fftOut[0][1] + 0.5 * fftOut[1][1]) / 1.5;
+    fftOut[MAX_INPUT/2-1][0] = fmax(0.0, fftOut[MAX_INPUT/2-1][1] - fftOut[MAX_INPUT/2-2][1]);
+    fftOut[0][0] = fmax(0.0, fftOut[0][1] - fftOut[1][1]);
     accPower = fftOut[0][0] + fftOut[MAX_INPUT/2-1][0];
     for(j=1 ; j<MAX_INPUT/2-1 ; ++j)
     {
-      fftOut[j][0] = (fftOut[j][1] + 0.5 * (fftOut[j-1][1] + fftOut[j+1][1])) / 2.0;
+      fftOut[j][0] = fmax(0.0, fftOut[j][1] - 0.5 * (fftOut[j-1][1] + fftOut[j+1][1]));
       accPower += fftOut[j][0];
     }
 
