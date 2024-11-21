@@ -9,32 +9,66 @@
 #define MAX_INPUT    (MAX_CHANNELS*2)
 #define INPUT_STEP   (MAX_INPUT)//MAX_INPUT/4)
 
-unsigned int bufSize = 1024;
-unsigned int sampleRate = 48000;
-unsigned int charCount = 8;
-bool use16bit = false;
-bool showCw = false;
-bool showDbg = false;
+unsigned int sampleRate = 48000; // Input audio sampling rate
+unsigned int printChars = 8;     // Number of characters to print at once
+bool use16bit = false;           // TRUE: Use S16 input values (else F32)
+bool showCw   = false;           // TRUE: Show dits and dahs
+bool showDbg  = false;           // TRUE: Print debug data to stderr
+
+Csdr::Ringbuffer<float> **in;
+Csdr::RingbufferReader<float> **inReader;
+Csdr::Ringbuffer<unsigned char> **out;
+Csdr::RingbufferReader<unsigned char> **outReader;
+Csdr::CwDecoder<float> **cwDecoder;
+
+// Print output from ith decoder
+void printOutput(FILE *outFile, int i, unsigned int freq, unsigned int printChars)
+{
+  // Must have a minimum of printChars
+  int n = outReader[i]->available();
+  if(n<printChars) return;
+
+  // Print frequency
+  fprintf(outFile, "%d:", freq);
+
+  // Print characters
+  unsigned char *p = outReader[i]->getReadPointer();
+  for(int j=0 ; j<n ; ++j)
+  {
+    if((j<n-1) && strchr("TE ", p[j+1]) && strchr("TE ", p[j])) ++j;
+    else fprintf(outFile, "%c", p[j]);
+  }
+
+  // Done printing
+  outReader[i]->advance(n);
+  printf("\n");
+  fflush(outFile);
+}
 
 int main(int argc, char *argv[])
 {
+  FILE *inFile, *outFile;
+  const char *inName, *outName;
   float accPower, avgPower;
-  int j, i, k, n, chrCount;
-  int remains;
+  int j, i, k, n, remains;
 
-  for(j=1 ; j<argc ; ++j)
+  // Parse input arguments
+  for(j=1, inName=outName=0, inFile=stdin, outFile=stdout ; j<argc ; ++j)
   {
     if(argv[j][0]!='-')
     {
+      // First two non-option arguments are filenames
+      if(!inName) inName = argv[j]; else if(!outName) outName = argv[j];
     }
     else if(strlen(argv[j])!=2)
     {
+      // Single-letter options only!
     }
     else switch(argv[j][1])
     {
       case 'n':
-        charCount = j<argc-1? atoi(argv[++j]) : charCount;
-        charCount = charCount<1? 1 : charCount>32? 32 : charCount;
+        printChars = j<argc-1? atoi(argv[++j]) : printChars;
+        printChars = printChars<1? 1 : printChars>32? 32 : printChars;
         break;
       case 'r':
         sampleRate = j<argc-1? atoi(argv[++j]) : sampleRate;
@@ -49,14 +83,18 @@ int main(int argc, char *argv[])
       case 'd':
         showDbg = true;
         break;
+      case 'c':
+        showCw = true;
+        break;
       case 'h':
         fprintf(stderr, "CSDR-Based CW Skimmer by Marat Fayzullin\n");
-        fprintf(stderr, "Usage: %s [options]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [options] [<infile> [<outfile>]]\n", argv[0]);
         fprintf(stderr, "  -r <rate>  -- Use given sampling rate.\n");
         fprintf(stderr, "  -n <chars> -- Number of characters to print.\n");
         fprintf(stderr, "  -i         -- Use 16bit signed integer input.\n");
         fprintf(stderr, "  -f         -- Use 32bit floating point input.\n");
-        fprintf(stderr, "  -d         -- Print debug information.\n");
+        fprintf(stderr, "  -c         -- Print dits and dahs to STDOUT.\n");
+        fprintf(stderr, "  -d         -- Print debug information to STDERR.\n");
         fprintf(stderr, "  -h         -- Print this help message.\n");
         return(0);
       default:
@@ -64,38 +102,60 @@ int main(int argc, char *argv[])
     }
   }
 
-  Csdr::Ringbuffer<float> *in[MAX_CHANNELS];
-  Csdr::RingbufferReader<float> *in_reader[MAX_CHANNELS];
-  Csdr::Ringbuffer<unsigned char> *out[MAX_CHANNELS];
-  Csdr::RingbufferReader<unsigned char> *out_reader[MAX_CHANNELS];
-  Csdr::CwDecoder<float> *cw[MAX_CHANNELS];
-
-  for(j=0 ; j<MAX_CHANNELS ; ++j)
+  // Open input and output files
+  inFile = inName? fopen(inName, "rb") : stdin;
+  if(!inFile)
   {
-    in[j]         = new Csdr::Ringbuffer<float>(sampleRate);
-    in_reader[j]  = new Csdr::RingbufferReader<float>(in[j]);
-    out[j]        = new Csdr::Ringbuffer<unsigned char>(bufSize);
-    out_reader[j] = new Csdr::RingbufferReader<unsigned char>(out[j]);
-    cw[j]         = new Csdr::CwDecoder<float>(sampleRate, showCw);
-    cw[j]->setReader(in_reader[j]);
-    cw[j]->setWriter(out[j]);
+    fprintf(stderr, "%s: Failed opening input file '%s'\n", argv[0], inName);
+    return(1);
+  }
+  outFile = outName? fopen(outName, "wb") : stdout;
+  if(!outFile)
+  {
+    fprintf(stderr, "%s: Failed opening output file '%s'\n", argv[0], outName);
+    if(inFile!=stdin) fclose(inFile);
+    return(1);
   }
 
+  // Allocate FFT plan, input, and output buffers
   fftwf_complex *fftOut = new fftwf_complex[MAX_INPUT];
   short *dataIn = new short[MAX_INPUT];
-  float *fftIn = new float[MAX_INPUT];
+  float *fftIn  = new float[MAX_INPUT];
   fftwf_plan fft = fftwf_plan_dft_r2c_1d(MAX_INPUT, fftIn, fftOut, FFTW_ESTIMATE);
 
+  // Allocate CSDR object storage
+  in        = new Csdr::Ringbuffer<float> *[MAX_CHANNELS];
+  inReader  = new Csdr::RingbufferReader<float> *[MAX_CHANNELS];
+  out       = new Csdr::Ringbuffer<unsigned char> *[MAX_CHANNELS];
+  outReader = new Csdr::RingbufferReader<unsigned char> *[MAX_CHANNELS];
+  cwDecoder = new Csdr::CwDecoder<float> *[MAX_CHANNELS];
+
+  // Debug output gets accumulated here
+  char dbgOut[MAX_CHANNELS+16];
+
+  // Create CSDR objects
+  for(j=0 ; j<MAX_CHANNELS ; ++j)
+  {
+    in[j]        = new Csdr::Ringbuffer<float>(sampleRate);
+    inReader[j]  = new Csdr::RingbufferReader<float>(in[j]);
+    out[j]       = new Csdr::Ringbuffer<unsigned char>(printChars*4);
+    outReader[j] = new Csdr::RingbufferReader<unsigned char>(out[j]);
+    cwDecoder[j] = new Csdr::CwDecoder<float>(sampleRate, showCw);
+    cwDecoder[j]->setReader(inReader[j]);
+    cwDecoder[j]->setWriter(out[j]);
+  }
+
+  // Read and decode input
   for(remains=0, avgPower=1.0 ; ; )
   {
     if(!use16bit)
     {
-      n = fread(fftIn+remains, sizeof(float), MAX_INPUT-remains, stdin);
+      n = fread(fftIn+remains, sizeof(float), MAX_INPUT-remains, inFile);
       if(n!=MAX_INPUT-remains) break;
     }
     else
     {
-      n = fread(dataIn+remains, sizeof(short), MAX_INPUT-remains, stdin);
+      n = fread(dataIn+remains, sizeof(short), MAX_INPUT-remains, inFile);
       if(n!=MAX_INPUT-remains) break;
       // Expand shorts to floats, normalizing them to [-1;1) range
       for(j=remains ; j<MAX_INPUT ; ++j)
@@ -108,8 +168,6 @@ int main(int argc, char *argv[])
     // Shift input data
     remains = MAX_INPUT-INPUT_STEP;
     memcpy(fftIn, fftIn+INPUT_STEP, remains*sizeof(float));
-
-    char diag[MAX_CHANNELS+16];
 
     // Go to magnitudes, compute average
     for(j=0, accPower=0.0 ; j<MAX_INPUT/2 ; ++j)
@@ -134,98 +192,81 @@ int main(int argc, char *argv[])
     avgPower  = fmax(avgPower, accPower) * 0.9999;
 
     // Decode by channel
-    for(j=i=k=chrCount=0, n=1, accPower=0.0 ; j<MAX_INPUT/2 ; ++j, ++n, k+=MAX_CHANNELS)
+    for(j=i=k=n=0, accPower=0.0 ; j<MAX_INPUT/2 ; ++j, ++n)
     {
       float power = fftOut[j][0];
 
+      // If accumulated enough FFT buckets for a channel...
       if(k>=MAX_INPUT/2)
       {
-        accPower /= n;
-        accPower  = accPower<avgPower*2.0? 0.0 : 1.0;
-        diag[i]   = accPower<0.5? '.' : '0' + round(fmax(fmin((accPower-0.5) * 18.0, 9.0), 0.0));
+        // Compute signal power for a channel
+        accPower  = n? accPower/n : 0.0;
+        accPower  = fmax(0.0, accPower - avgPower);
+        dbgOut[i] = accPower<0.5? '.' : '0' + round(fmax(fmin((accPower-0.5) * 18.0, 9.0), 0.0));
 
-        // If filtered input buffer can accept samples...
+        // If CW input buffer can accept samples...
         if(in[i]->writeable()>=INPUT_STEP)
         {
-          // Fill input buffer with computed input power
+          // Fill input buffer with computed signal power
           float *dst = in[i]->getWritePointer();
           for(int j=0 ; j<INPUT_STEP ; ++j) dst[j] = accPower;
           in[i]->advance(INPUT_STEP);
 
           // Process input for the current channel
-          while(cw[i]->canProcess()) cw[i]->process();
+          while(cwDecoder[i]->canProcess()) cwDecoder[i]->process();
 
           // Print output
-          int m = out_reader[i]->available();
-          if(m>=charCount)
-          {
-            unsigned char *p = out_reader[i]->getReadPointer();
-            printf("%d:", i * sampleRate / 2 / MAX_CHANNELS);
-            for(int j=0 ; j<m ; ++j)
-            {
-              if((j<m-1) && (p[j+1]==' ') && ((p[j]=='E') || (p[j]=='T')))
-                ++j;
-              else
-                printf("%c", p[j]);
-            }
-            out_reader[i]->advance(m);
-            chrCount += m;
-            printf("\n");
-            fflush(stdout);
-          }
+          printOutput(outFile, i, i * sampleRate / 2 / MAX_CHANNELS, printChars);
         }
 
+        // Start on a new channel
         accPower = 0.0;
         k -= MAX_INPUT/2;
         i += 1;
         n  = 0;
       }
 
+      // Accumulate channel signal power
       accPower += power;
+      k += MAX_CHANNELS;
     }
 
     // Print debug information to the stderr
-    diag[i] = '\0';
-    if(showDbg) fprintf(stderr, "%s (%.2f - %d)\n", diag, avgPower, chrCount);
+    dbgOut[i] = '\0';
+    if(showDbg) fprintf(stderr, "%s (%.2f)\n", dbgOut, avgPower);
   }
 
   // Final printout
   for(i=0 ; i<MAX_CHANNELS ; i++)
-  {
-    // Print output
-    int n = out_reader[i]->available();
-    if(n)
-    {
-      unsigned char *p = out_reader[i]->getReadPointer();
-      printf("%d:", i * sampleRate / 2 / MAX_CHANNELS);
-      for(int j=0 ; j<n ; ++j)
-        if((j<n-1) && (p[j+1]==' ') && ((p[j]=='E') || (p[j]=='T')))
-          ++j;
-        else
-          printf("%c", p[j]);
-      out_reader[i]->advance(n);
-      printf("\n");
-      fflush(stdout);
-    }
-  }
+    printOutput(outFile, i, i * sampleRate / 2 / MAX_CHANNELS, 1);
+
+  // Close files
+  if(outFile!=stdout) fclose(outFile);
+  if(inFile!=stdin)   fclose(inFile);
 
   // Release FFTW3 resources
   fftwf_destroy_plan(fft);
-  delete fftOut;
-  delete fftIn;
-  delete dataIn;
+  delete [] fftOut;
+  delete [] fftIn;
+  delete [] dataIn;
 
   // Release CSDR resources
   for(j=0 ; j<MAX_CHANNELS ; ++j)
   {
-    delete out_reader[j];
+    delete outReader[j];
     delete out[j];
-    delete cw[j];
-    delete in_reader[j];
+    delete cwDecoder[j];
+    delete inReader[j];
     delete in[j];
   }
+
+  // Release CSDR object storage
+  delete [] in;
+  delete [] inReader;
+  delete [] out;
+  delete [] outReader;
+  delete [] cwDecoder;
 
   // Done
   return(0);
 }
-
