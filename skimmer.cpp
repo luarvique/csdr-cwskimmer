@@ -8,6 +8,7 @@
 #define MAX_CHANNELS (sampleRate/2/100)
 #define MAX_INPUT    (MAX_CHANNELS*2)
 #define INPUT_STEP   (MAX_INPUT)//MAX_INPUT/4)
+#define AVG_SECONDS  (3)
 
 unsigned int sampleRate = 48000; // Input audio sampling rate
 unsigned int printChars = 8;     // Number of characters to print at once
@@ -35,7 +36,7 @@ void printOutput(FILE *outFile, int i, unsigned int freq, unsigned int printChar
   unsigned char *p = outReader[i]->getReadPointer();
   for(int j=0 ; j<n ; ++j)
   {
-    if((j<n-1) && strchr("TE ", p[j+1]) && strchr("TE ", p[j])) ++j;
+    if((j<n-1) && strchr("TEI ", p[j+1]) && strchr("TEI ", p[j])) ++j;
     else fprintf(outFile, "%c", p[j]);
   }
 
@@ -196,9 +197,9 @@ int main(int argc, char *argv[])
       accPower += fftOut[j][0];
     }
 
-    // Maintain rolling average
+    // Maintain rolling average over AVG_SECONDS
     accPower /= MAX_INPUT/2;
-    avgPower  = fmax(avgPower, accPower) * 0.9999;
+    avgPower += (accPower - avgPower) * INPUT_STEP / sampleRate / AVG_SECONDS;
 
     // Decode by channel
     for(j=i=k=n=0, accPower=0.0 ; j<MAX_INPUT/2 ; ++j, ++n)
