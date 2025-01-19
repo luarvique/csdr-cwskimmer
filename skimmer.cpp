@@ -50,7 +50,7 @@ int main(int argc, char *argv[])
 {
   FILE *inFile, *outFile;
   const char *inName, *outName;
-  float accPower, avgPower;
+  float accPower, avgPower, maxPower;
   int j, i, k, n, remains;
 
   // Parse input arguments
@@ -191,10 +191,12 @@ int main(int argc, char *argv[])
     fftOut[MAX_INPUT/2-1][0] = fmax(0.0, fftOut[MAX_INPUT/2-1][1] - fftOut[MAX_INPUT/2-2][1]);
     fftOut[0][0] = fmax(0.0, fftOut[0][1] - fftOut[1][1]);
     accPower = fftOut[0][0] + fftOut[MAX_INPUT/2-1][0];
+    maxPower = fmax(fftOut[0][0], fftOut[MAX_INPUT/2-1][0]);
     for(j=1 ; j<MAX_INPUT/2-1 ; ++j)
     {
       fftOut[j][0] = fmax(0.0, fftOut[j][1] - 0.5 * (fftOut[j-1][1] + fftOut[j+1][1]));
       accPower += fftOut[j][0];
+      maxPower  = fmax(maxPower, fftOut[j][0]);
     }
 
     // Maintain rolling average over AVG_SECONDS
@@ -210,9 +212,8 @@ int main(int argc, char *argv[])
       if(k>=MAX_INPUT/2)
       {
         // Compute signal power for a channel
-        accPower  = n? accPower/n : 0.0;
         accPower  = fmax(0.0, accPower - avgPower);
-        dbgOut[i] = accPower<0.5? '.' : '0' + round(fmax(fmin((accPower-0.5) * 18.0, 9.0), 0.0));
+        dbgOut[i] = accPower<0.5? '.' : '0' + round(fmax(fmin(accPower / maxPower * 10.0, 9.0), 0.0));
 
         // If CW input buffer can accept samples...
         if(in[i]->writeable()>=INPUT_STEP)
@@ -236,14 +237,14 @@ int main(int argc, char *argv[])
         n  = 0;
       }
 
-      // Accumulate channel signal power
-      accPower += power;
+      // Maximize channel signal power
+      accPower = fmax(accPower, power);
       k += MAX_CHANNELS;
     }
 
     // Print debug information to the stderr
     dbgOut[i] = '\0';
-    if(showDbg) fprintf(stderr, "%s (%.2f)\n", dbgOut, avgPower);
+    if(showDbg) fprintf(stderr, "%s (%.2f, %.2f)\n", dbgOut, avgPower, maxPower);
   }
 
   // Final printout
