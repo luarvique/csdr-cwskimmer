@@ -5,6 +5,10 @@
 #include <string.h>
 #include <math.h>
 
+#define USE_NEIGHBORS  1 // 1: Subtract neighbors from each FFT bucket
+#define USE_AVG_BOTTOM 1 // 1: Subtract average value from each bucket
+#define USE_AVG_RATIO  0 // 1: Divide each bucket by average value
+
 #define MAX_CHANNELS (sampleRate/2/100)
 #define MAX_INPUT    (MAX_CHANNELS*2)
 #define INPUT_STEP   (MAX_INPUT)//MAX_INPUT/4)
@@ -188,13 +192,17 @@ int main(int argc, char *argv[])
     }
 
     // Filter out spurs
+#if USE_NEIGHBORS
     fftOut[MAX_INPUT/2-1][0] = fmax(0.0, fftOut[MAX_INPUT/2-1][1] - fftOut[MAX_INPUT/2-2][1]);
     fftOut[0][0] = fmax(0.0, fftOut[0][1] - fftOut[1][1]);
+#endif
     accPower = fftOut[0][0] + fftOut[MAX_INPUT/2-1][0];
     maxPower = fmax(fftOut[0][0], fftOut[MAX_INPUT/2-1][0]);
     for(j=1 ; j<MAX_INPUT/2-1 ; ++j)
     {
+#if USE_NEIGHBORS
       fftOut[j][0] = fmax(0.0, fftOut[j][1] - 0.5 * (fftOut[j-1][1] + fftOut[j+1][1]));
+#endif
       accPower += fftOut[j][0];
       maxPower  = fmax(maxPower, fftOut[j][0]);
     }
@@ -212,7 +220,12 @@ int main(int argc, char *argv[])
       if(k>=MAX_INPUT/2)
       {
         // Compute signal power for a channel
+#if USE_AVG_BOTTOM
         accPower  = fmax(0.0, accPower - avgPower);
+#endif
+#if USE_AVG_RATIO
+        accPower  = fmax(1.0, accPower / avgPower);
+#endif
         dbgOut[i] = accPower<0.5? '.' : '0' + round(fmax(fmin(accPower / maxPower * 10.0, 9.0), 0.0));
 
         // If CW input buffer can accept samples...
