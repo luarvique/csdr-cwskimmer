@@ -13,6 +13,7 @@
 #define MAX_INPUT    (MAX_CHANNELS*2)
 #define INPUT_STEP   (MAX_INPUT)//MAX_INPUT/4)
 #define AVG_SECONDS  (3)
+#define NEIGH_WEIGHT (0.5)
 
 unsigned int sampleRate = 48000; // Input audio sampling rate
 unsigned int printChars = 8;     // Number of characters to print at once
@@ -193,15 +194,15 @@ int main(int argc, char *argv[])
 
     // Filter out spurs
 #if USE_NEIGHBORS
-    fftOut[MAX_INPUT/2-1][0] = fmax(0.0, fftOut[MAX_INPUT/2-1][1] - fftOut[MAX_INPUT/2-2][1]);
-    fftOut[0][0] = fmax(0.0, fftOut[0][1] - fftOut[1][1]);
+    fftOut[MAX_INPUT/2-1][0] = fmax(0.0, fftOut[MAX_INPUT/2-1][1] - NEIGH_WEIGHT * fftOut[MAX_INPUT/2-2][1]);
+    fftOut[0][0] = fmax(0.0, fftOut[0][1] - NEIGH_WEIGHT * fftOut[1][1]);
 #endif
     accPower = fftOut[0][0] + fftOut[MAX_INPUT/2-1][0];
     maxPower = fmax(fftOut[0][0], fftOut[MAX_INPUT/2-1][0]);
     for(j=1 ; j<MAX_INPUT/2-1 ; ++j)
     {
 #if USE_NEIGHBORS
-      fftOut[j][0] = fmax(0.0, fftOut[j][1] - 0.5 * (fftOut[j-1][1] + fftOut[j+1][1]));
+      fftOut[j][0] = fmax(0.0, fftOut[j][1] - 0.5 * NEIGH_WEIGHT * (fftOut[j-1][1] + fftOut[j+1][1]));
 #endif
       accPower += fftOut[j][0];
       maxPower  = fmax(maxPower, fftOut[j][0]);
