@@ -161,7 +161,7 @@ int main(int argc, char *argv[])
   }
 
   // Read and decode input
-  for(remains=0, avgPower=1.0 ; ; )
+  for(remains=0, avgPower=4.0 ; ; )
   {
     if(!use16bit)
     {
@@ -184,13 +184,9 @@ int main(int argc, char *argv[])
     remains = MAX_INPUT-INPUT_STEP;
     memcpy(fftIn, fftIn+INPUT_STEP, remains*sizeof(float));
 
-    // Go to magnitudes, compute average
-    for(j=0, accPower=0.0 ; j<MAX_INPUT/2 ; ++j)
-    {
-      float power = sqrt(fftOut[j][0]*fftOut[j][0] + fftOut[j][1]*fftOut[j][1]);
-      fftOut[j][1] = power;
-      accPower += power;
-    }
+    // Go to magnitudes
+    for(j=0 ; j<MAX_INPUT/2 ; ++j)
+      fftOut[j][0] = fftOut[j][1] = sqrt(fftOut[j][0]*fftOut[j][0] + fftOut[j][1]*fftOut[j][1]);
 
     // Filter out spurs
 #if USE_NEIGHBORS
