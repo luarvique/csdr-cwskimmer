@@ -10,12 +10,13 @@
 #define USE_AVG_RATIO  0 // 1: Divide each bucket by average value
 #define USE_THRESHOLD  1 // 1: Convert each bucket to 0.0/1.0 values
 
+#define MAX_SCALES   (8)
 #define MAX_CHANNELS (sampleRate/2/100)
 #define MAX_INPUT    (MAX_CHANNELS*2)
 #define INPUT_STEP   (MAX_INPUT)//MAX_INPUT/4)
 #define AVG_SECONDS  (3)
 #define NEIGH_WEIGHT (0.5)
-#define THRES_WEIGHT (4.0)
+#define THRES_WEIGHT (8.0)
 
 unsigned int sampleRate = 48000; // Input audio sampling rate
 unsigned int printChars = 8;     // Number of characters to print at once
@@ -59,6 +60,12 @@ int main(int argc, char *argv[])
   const char *inName, *outName;
   float accPower, avgPower, maxPower;
   int j, i, k, n, remains;
+
+  struct
+  {
+    float power;
+    int count;
+  } scales[MAX_SCALES];
 
   // Parse input arguments
   for(j=1, inName=outName=0, inFile=stdin, outFile=stdout ; j<argc ; ++j)
@@ -194,20 +201,46 @@ int main(int argc, char *argv[])
 #if USE_NEIGHBORS
     fftOut[MAX_INPUT/2-1][0] = fmax(0.0, fftOut[MAX_INPUT/2-1][1] - NEIGH_WEIGHT * fftOut[MAX_INPUT/2-2][1]);
     fftOut[0][0] = fmax(0.0, fftOut[0][1] - NEIGH_WEIGHT * fftOut[1][1]);
-#endif
-    accPower = fftOut[0][0] + fftOut[MAX_INPUT/2-1][0];
-    maxPower = fmax(fftOut[0][0], fftOut[MAX_INPUT/2-1][0]);
     for(j=1 ; j<MAX_INPUT/2-1 ; ++j)
-    {
-#if USE_NEIGHBORS
       fftOut[j][0] = fmax(0.0, fftOut[j][1] - 0.5 * NEIGH_WEIGHT * (fftOut[j-1][1] + fftOut[j+1][1]));
 #endif
-      accPower += fftOut[j][0];
-      maxPower  = fmax(maxPower, fftOut[j][0]);
+
+    // Sort buckets into scales
+    memset(scales, 0, sizeof(scales));
+    for(j=0, maxPower=0.0 ; j<MAX_INPUT/2 ; ++j)
+    {
+      float v = fftOut[j][0];
+      int scale = floor(log10(v));
+      scale = scale<0? 0 : scale+1>=MAX_SCALES? MAX_SCALES-1 : scale+1;
+      maxPower = fmax(maxPower, v);
+      scales[scale].power += v;
+      scales[scale].count++;
     }
 
+    // Find two most populated scales
+    int maxj0 = scales[0].count>scales[1].count? 0:1;
+    int maxj1 = scales[0].count>scales[1].count? 1:0;
+    for(j=2 ; j<MAX_SCALES ; ++j)
+    {
+      if(scales[j].count>scales[maxj1].count)
+      {
+        maxj1 = j;
+        if(scales[j].count>scales[maxj0].count)
+        {
+          maxj1 = maxj0;
+          maxj0 = j;
+        }
+      }
+    }
+
+    // Use two most populated scales to obtain ground power
+//    accPower = (scales[maxj0].power + scales[maxj1].power) /
+//               (scales[maxj0].count + scales[maxj1].count);
+
+    // Use most populated scale to obtain ground power
+    accPower = scales[maxj0].power / scales[maxj0].count;
+
     // Maintain rolling average over AVG_SECONDS
-    accPower /= MAX_INPUT/2;
     avgPower += (accPower - avgPower) * INPUT_STEP / sampleRate / AVG_SECONDS;
 
     // Decode by channel
