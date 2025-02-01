@@ -5,15 +5,17 @@
 #include <string.h>
 #include <math.h>
 
-#define USE_NEIGHBORS  1 // 1: Subtract neighbors from each FFT bucket
-#define USE_AVG_BOTTOM 1 // 1: Subtract average value from each bucket
+#define USE_NEIGHBORS  0 // 1: Subtract neighbors from each FFT bucket
+#define USE_AVG_BOTTOM 0 // 1: Subtract average value from each bucket
 #define USE_AVG_RATIO  0 // 1: Divide each bucket by average value
+#define USE_THRESHOLD  1 // 1: Convert each bucket to 0.0/1.0 values
 
 #define MAX_CHANNELS (sampleRate/2/100)
 #define MAX_INPUT    (MAX_CHANNELS*2)
 #define INPUT_STEP   (MAX_INPUT)//MAX_INPUT/4)
 #define AVG_SECONDS  (3)
 #define NEIGH_WEIGHT (0.5)
+#define THRES_WEIGHT (4.0)
 
 unsigned int sampleRate = 48000; // Input audio sampling rate
 unsigned int printChars = 8;     // Number of characters to print at once
@@ -216,13 +218,17 @@ int main(int argc, char *argv[])
       // If accumulated enough FFT buckets for a channel...
       if(k>=MAX_INPUT/2)
       {
-        // Compute signal power for a channel
-#if USE_AVG_BOTTOM
-        accPower  = fmax(0.0, accPower - avgPower);
-#endif
 #if USE_AVG_RATIO
-        accPower  = fmax(1.0, accPower / avgPower);
+        // Divide channel signal by the average power
+        accPower = fmax(1.0, accPower / fmax(avgPower, 0.000001));
+#elif USE_AVG_BOTTOM
+        // Subtract average power from the channel signal
+        accPower = fmax(0.0, accPower - avgPower);
+#elif USE_THRESHOLD
+        // Convert channel signal to 1/0 values based on threshold
+        accPower = accPower >= avgPower*THRES_WEIGHT? 1.0 : 0.0;
 #endif
+
         dbgOut[i] = accPower<0.5? '.' : '0' + round(fmax(fmin(accPower / maxPower * 10.0, 9.0), 0.0));
 
         // If CW input buffer can accept samples...
