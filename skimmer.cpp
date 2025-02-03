@@ -29,6 +29,7 @@ Csdr::RingbufferReader<float> **inReader;
 Csdr::Ringbuffer<unsigned char> **out;
 Csdr::RingbufferReader<unsigned char> **outReader;
 Csdr::CwDecoder<float> **cwDecoder;
+unsigned char *outState;
 
 // Print output from ith decoder
 void printOutput(FILE *outFile, int i, unsigned int freq, unsigned int printChars)
@@ -44,8 +45,33 @@ void printOutput(FILE *outFile, int i, unsigned int freq, unsigned int printChar
   unsigned char *p = outReader[i]->getReadPointer();
   for(int j=0 ; j<n ; ++j)
   {
-    if((j<n-1) && strchr("TEI ", p[j+1]) && strchr("TEI ", p[j])) ++j;
-    else fprintf(outFile, "%c", p[j]);
+    switch(outState[i])
+    {
+      case '\0':
+        // Print character
+        fprintf(outFile, "%c", p[j]);
+        // Once we encounter a space, wait for stray characters
+        if(p[j]==' ') outState[i] = p[j];
+        break;
+      case ' ':
+        // If possible error, save it in state, else print and reset state
+        if(strchr("TEI ", p[j])) outState[i] = p[j];
+        else
+        {
+          fprintf(outFile, "%c", p[j]);
+          outState[i] = '\0';
+        }
+        break;
+      default:
+        // If likely error, skip it, else print and reset state
+        if((p[j]==' ') || (p[j]==outState[i])) outState[i] = p[j];
+        else
+        {
+          fprintf(outFile, "%c%c", outState[i], p[j]);
+          outState[i] = '\0';
+        }
+        break;
+    }
   }
 
   // Done printing
@@ -153,6 +179,7 @@ int main(int argc, char *argv[])
   out       = new Csdr::Ringbuffer<unsigned char> *[MAX_CHANNELS];
   outReader = new Csdr::RingbufferReader<unsigned char> *[MAX_CHANNELS];
   cwDecoder = new Csdr::CwDecoder<float> *[MAX_CHANNELS];
+  outState  = new unsigned char[MAX_CHANNELS];
 
   // Debug output gets accumulated here
   char dbgOut[MAX_CHANNELS+16];
@@ -168,6 +195,9 @@ int main(int argc, char *argv[])
     cwDecoder[j]->setReader(inReader[j]);
     cwDecoder[j]->setWriter(out[j]);
   }
+
+  // Clear output state
+  memset(outState, 0, MAX_CHANNELS);
 
   // Read and decode input
   for(remains=0, avgPower=4.0 ; ; )
@@ -326,6 +356,7 @@ int main(int argc, char *argv[])
   delete [] out;
   delete [] outReader;
   delete [] cwDecoder;
+  delete [] outState;
 
   // Done
   return(0);
