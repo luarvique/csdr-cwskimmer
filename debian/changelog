@@ -2,6 +2,7 @@ csdr-cwskimmer (1.2) stable; urgency=low
 
   * Converting inputs to 1/0 before feeding to CW decoders.
   * Picking the most common magnitude as the base for 0.
+  * Improved errors removal (repeating I/E/Ts).
 
  -- Marat Fayzullin <luarvique@gmail.com>  Mon, 3 Feb 2025 12:18:02 -0000
 
