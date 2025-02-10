@@ -16,7 +16,7 @@
 #define INPUT_STEP   (MAX_INPUT)//MAX_INPUT/4)
 #define AVG_SECONDS  (3)
 #define NEIGH_WEIGHT (0.5)
-#define THRES_WEIGHT (10.0)
+#define THRES_WEIGHT (4.0)
 
 unsigned int sampleRate = 48000; // Input audio sampling rate
 unsigned int printChars = 8;     // Number of characters to print at once
@@ -247,8 +247,8 @@ int main(int argc, char *argv[])
       scales[scale].count++;
     }
 
-    // Find most populated scales
-    for(i=0, n=0 ; i<MAX_SCALES-1 ; ++i)
+    // Find most populated scales and use them for ground power
+    for(i=0, n=0, accPower=0.0 ; i<MAX_SCALES-1 ; ++i)
     {
       // Look for the next most populated scale
       for(k=i, j=i+1 ; j<MAX_SCALES ; ++j)
@@ -263,18 +263,13 @@ int main(int argc, char *argv[])
         scales[i].count = j;
       }
       // Keep track of the total number of buckets
+      accPower += scales[i].power;
       n += scales[i].count;
       // Stop when we collect 1/2 of all buckets
       if(n>=MAX_INPUT/2/2) break;
     }
 
-    // Use most populated scales to obtain ground power
-    for(j=0, n=0, accPower=0.0 ; j<=i ; ++j)
-    {
-      accPower += scales[j].power;
-      n += scales[j].count;
-    }
-
+fprintf(stderr, "accPower = %f (%d/%d = %d%%)\n", accPower/n, n, MAX_INPUT/2, 100*n*2/MAX_INPUT);
     // Maintain rolling average over AVG_SECONDS
     accPower /= n;
     avgPower += (accPower - avgPower) * INPUT_STEP / sampleRate / AVG_SECONDS;
