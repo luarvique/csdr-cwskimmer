@@ -64,7 +64,7 @@ void printOutput(FILE *outFile, int i, unsigned int freq, unsigned int printChar
         break;
       default:
         // If likely error, skip it, else print and reset state
-        if((p[j]==' ') || (p[j]==outState[i])) outState[i] = p[j];
+        if(strchr("TEI ", p[j])) outState[i] = p[j];
         else
         {
           fprintf(outFile, "%c%c", outState[i], p[j]);
@@ -197,7 +197,7 @@ int main(int argc, char *argv[])
   }
 
   // Clear output state
-  memset(outState, 0, MAX_CHANNELS);
+  memset(outState, ' ', MAX_CHANNELS);
 
   // Read and decode input
   for(remains=0, avgPower=4.0 ; ; )
