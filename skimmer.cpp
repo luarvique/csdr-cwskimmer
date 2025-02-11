@@ -269,7 +269,8 @@ int main(int argc, char *argv[])
       if(n>=MAX_INPUT/2/2) break;
     }
 
-fprintf(stderr, "accPower = %f (%d/%d = %d%%)\n", accPower/n, n, MAX_INPUT/2, 100*n*2/MAX_INPUT);
+//fprintf(stderr, "accPower = %f (%d/%d = %d%%)\n", accPower/n, n, MAX_INPUT/2, 100*n*2/MAX_INPUT);
+
     // Maintain rolling average over AVG_SECONDS
     accPower /= n;
     avgPower += (accPower - avgPower) * INPUT_STEP / sampleRate / AVG_SECONDS;
