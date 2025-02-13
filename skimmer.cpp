@@ -10,7 +10,7 @@
 #define USE_AVG_RATIO  0 // 1: Divide each bucket by average value
 #define USE_THRESHOLD  1 // 1: Convert each bucket to 0.0/1.0 values
 
-#define MAX_SCALES   (8)
+#define MAX_SCALES   (16)
 #define MAX_CHANNELS (sampleRate/2/100)
 #define MAX_INPUT    (MAX_CHANNELS*2)
 #define INPUT_STEP   (MAX_INPUT)//MAX_INPUT/4)
