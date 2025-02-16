@@ -29,7 +29,7 @@ Csdr::RingbufferReader<float> **inReader;
 Csdr::Ringbuffer<unsigned char> **out;
 Csdr::RingbufferReader<unsigned char> **outReader;
 Csdr::CwDecoder<float> **cwDecoder;
-unsigned char *outState;
+unsigned int *outState;
 
 // Hamming window function
 double hamming(unsigned int x, unsigned int size)
@@ -51,7 +51,7 @@ void printOutput(FILE *outFile, int i, unsigned int freq, unsigned int printChar
   unsigned char *p = outReader[i]->getReadPointer();
   for(int j=0 ; j<n ; ++j)
   {
-    switch(outState[i])
+    switch(outState[i] & 0xFF)
     {
       case '\0':
         // Print character
@@ -70,10 +70,13 @@ void printOutput(FILE *outFile, int i, unsigned int freq, unsigned int printChar
         break;
       default:
         // If likely error, skip it, else print and reset state
-        if(strchr("TEI ", p[j])) outState[i] = p[j];
+        if(strchr("TEI ", p[j])) outState[i] = (outState[i]<<8) | p[j];
         else
         {
-          fprintf(outFile, "%c%c", outState[i], p[j]);
+          for(int k=24 ; k>=0 ; k-=8)
+            if((outState[i]>>k) & 0xFF)
+              fprintf(outFile, "%c", (outState[i]>>k) & 0xFF);
+          fprintf(outFile, "%c", p[j]);
           outState[i] = '\0';
         }
         break;
@@ -186,12 +189,12 @@ int main(int argc, char *argv[])
   out       = new Csdr::Ringbuffer<unsigned char> *[MAX_CHANNELS];
   outReader = new Csdr::RingbufferReader<unsigned char> *[MAX_CHANNELS];
   cwDecoder = new Csdr::CwDecoder<float> *[MAX_CHANNELS];
-  outState  = new unsigned char[MAX_CHANNELS];
+  outState  = new unsigned int[MAX_CHANNELS];
 
   // Debug output gets accumulated here
   char dbgOut[MAX_CHANNELS+16];
 
-  // Create CSDR objects
+  // Create and connect CSDR objects, clear output state
   for(j=0 ; j<MAX_CHANNELS ; ++j)
   {
     in[j]        = new Csdr::Ringbuffer<float>(sampleRate);
@@ -201,10 +204,8 @@ int main(int argc, char *argv[])
     cwDecoder[j] = new Csdr::CwDecoder<float>(sampleRate, showCw);
     cwDecoder[j]->setReader(inReader[j]);
     cwDecoder[j]->setWriter(out[j]);
+    outState[j] = ' ';
   }
-
-  // Clear output state
-  memset(outState, ' ', MAX_CHANNELS);
 
   // Read and decode input
   for(remains=0, avgPower=4.0 ; ; )
