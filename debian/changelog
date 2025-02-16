@@ -1,3 +1,11 @@
+csdr-cwskimmer (1.3) stable; urgency=low
+
+  * Using exponential scale to sort magnitudes.
+  * Applying Hamming window to the FFT input.
+  * Improved errors removal again.
+
+ -- Marat Fayzullin <luarvique@gmail.com>  Mon, 17 Feb 2025 12:18:02 -0000
+
 csdr-cwskimmer (1.2) stable; urgency=low
 
   * Converting inputs to 1/0 before feeding to CW decoders.
