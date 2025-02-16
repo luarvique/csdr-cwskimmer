@@ -31,6 +31,12 @@ Csdr::RingbufferReader<unsigned char> **outReader;
 Csdr::CwDecoder<float> **cwDecoder;
 unsigned char *outState;
 
+// Hamming window function
+double hamming(unsigned int x, unsigned int size)
+{
+  return(0.54 - 0.46 * cos((2.0 * M_PI * x) / (size - 1)));
+}
+
 // Print output from ith decoder
 void printOutput(FILE *outFile, int i, unsigned int freq, unsigned int printChars)
 {
@@ -169,8 +175,9 @@ int main(int argc, char *argv[])
 
   // Allocate FFT plan, input, and output buffers
   fftwf_complex *fftOut = new fftwf_complex[MAX_INPUT];
-  short *dataIn = new short[MAX_INPUT];
-  float *fftIn  = new float[MAX_INPUT];
+  short *dataIn  = new short[MAX_INPUT];
+  float *dataBuf = new float[MAX_INPUT];
+  float *fftIn   = new float[MAX_INPUT];
   fftwf_plan fft = fftwf_plan_dft_r2c_1d(MAX_INPUT, fftIn, fftOut, FFTW_ESTIMATE);
 
   // Allocate CSDR object storage
@@ -204,7 +211,7 @@ int main(int argc, char *argv[])
   {
     if(!use16bit)
     {
-      n = fread(fftIn+remains, sizeof(float), MAX_INPUT-remains, inFile);
+      n = fread(dataBuf+remains, sizeof(float), MAX_INPUT-remains, inFile);
       if(n!=MAX_INPUT-remains) break;
     }
     else
@@ -213,15 +220,20 @@ int main(int argc, char *argv[])
       if(n!=MAX_INPUT-remains) break;
       // Expand shorts to floats, normalizing them to [-1;1) range
       for(j=remains ; j<MAX_INPUT ; ++j)
-        fftIn[j] = (float)dataIn[j] / 32768.0;
+        dataBuf[j] = (float)dataIn[j] / 32768.0;
     }
 
-    // Compute FFT
-    fftwf_execute(fft);
+    // Apply Hamming window
+    double hk = 2.0 * M_PI / (MAX_INPUT-1);
+    for(j=0 ; j<MAX_INPUT ; ++j)
+      fftIn[j] = dataBuf[j] * (0.54 - 0.46 * cos(j * hk));
 
     // Shift input data
     remains = MAX_INPUT-INPUT_STEP;
-    memcpy(fftIn, fftIn+INPUT_STEP, remains*sizeof(float));
+    memcpy(dataBuf, dataBuf+INPUT_STEP, remains*sizeof(float));
+
+    // Compute FFT
+    fftwf_execute(fft);
 
     // Go to magnitudes
     for(j=0 ; j<MAX_INPUT/2 ; ++j)
@@ -340,6 +352,7 @@ int main(int argc, char *argv[])
   fftwf_destroy_plan(fft);
   delete [] fftOut;
   delete [] fftIn;
+  delete [] dataBuf;
   delete [] dataIn;
 
   // Release CSDR resources
