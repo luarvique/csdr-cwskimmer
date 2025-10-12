@@ -12,8 +12,8 @@
 
 #define BANDWIDTH    (100)
 #define MAX_SCALES   (16)
-#define MAX_CHANNELS (MAX_INPUT/2)
 #define MAX_INPUT    (sampleRate/BANDWIDTH)
+#define MAX_CHANNELS (MAX_INPUT/2)
 #define AVG_SECONDS  (3)
 #define NEIGH_WEIGHT (0.5)
 #define THRES_WEIGHT (6.0)
