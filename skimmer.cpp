@@ -3,6 +3,7 @@
 #include "fftw3.h"
 #include <stdio.h>
 #include <string.h>
+#include <float.h>
 #include <math.h>
 
 #define USE_NEIGHBORS  0 // 1: Subtract neighbors from each FFT bucket
@@ -287,7 +288,7 @@ int main(int argc, char *argv[])
 
 #if USE_AVG_RATIO
       // Divide channel signal by the average power
-      accPower = fmax(1.0, power / fmax(avgPower, 0.000001));
+      accPower = fmax(1.0, power / fmax(avgPower, 10.0*FLT_MIN));
 #elif USE_AVG_BOTTOM
       // Subtract average power from the channel signal
       accPower = fmax(0.0, power - avgPower);
