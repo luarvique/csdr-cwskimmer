@@ -2,13 +2,13 @@ Source: csdr-skimmer
 Maintainer: Marat Fayzullin <luarvique@gmail.com>
 Section: hamradio
 Priority: optional
-Provides: csdr-cwskimmer
-Replaces: csdr-cwskimmer
 Rules-Requires-Root: no
 Standards-Version: 4.3.0
 Build-Depends: debhelper (>= 12), libfftw3-dev (>= 3.3), libcsdr-dev (>= 0.18.18)
 
 Package: csdr-skimmer
+Provides: csdr-cwskimmer
+Replaces: csdr-cwskimmer
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: Bulk CW and RTTY decoders
