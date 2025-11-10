@@ -1,3 +1,5 @@
+#include "bufmodule.hpp"
+
 #include "csdr/ringbuffer.hpp"
 #include "csdr/cw.hpp"
 #include "fftw3.h"
@@ -25,11 +27,9 @@ bool use16bit = false;           // TRUE: Use S16 input values (else F32)
 bool showCw   = false;           // TRUE: Show dits and dahs
 bool showDbg  = false;           // TRUE: Print debug data to stderr
 
-Csdr::Ringbuffer<float> **in;
-Csdr::RingbufferReader<float> **inReader;
 Csdr::Ringbuffer<unsigned char> **out;
 Csdr::RingbufferReader<unsigned char> **outReader;
-Csdr::CwDecoder<float> **cwDecoder;
+Csdr::BufferedModule<float, unsigned char> **cwDecoder;
 unsigned int *outState;
 
 // Print output from ith decoder
@@ -179,11 +179,9 @@ int main(int argc, char *argv[])
   fftwf_plan fft = fftwf_plan_dft_r2c_1d(MAX_INPUT, fftIn, fftOut, FFTW_ESTIMATE);
 
   // Allocate CSDR object storage
-  in        = new Csdr::Ringbuffer<float> *[MAX_CHANNELS];
-  inReader  = new Csdr::RingbufferReader<float> *[MAX_CHANNELS];
   out       = new Csdr::Ringbuffer<unsigned char> *[MAX_CHANNELS];
   outReader = new Csdr::RingbufferReader<unsigned char> *[MAX_CHANNELS];
-  cwDecoder = new Csdr::CwDecoder<float> *[MAX_CHANNELS];
+  cwDecoder = new Csdr::BufferedModule<float, unsigned char> *[MAX_CHANNELS];
   outState  = new unsigned int[MAX_CHANNELS];
 
   // Debug output gets accumulated here
@@ -192,12 +190,9 @@ int main(int argc, char *argv[])
   // Create and connect CSDR objects, clear output state
   for(j=0 ; j<MAX_CHANNELS ; ++j)
   {
-    in[j]        = new Csdr::Ringbuffer<float>(sampleRate);
-    inReader[j]  = new Csdr::RingbufferReader<float>(in[j]);
     out[j]       = new Csdr::Ringbuffer<unsigned char>(printChars*4);
     outReader[j] = new Csdr::RingbufferReader<unsigned char>(out[j]);
-    cwDecoder[j] = new Csdr::CwDecoder<float>(sampleRate, showCw);
-    cwDecoder[j]->setReader(inReader[j]);
+    cwDecoder[j] = new Csdr::BufferedModule<float, unsigned char>(new Csdr::CwDecoder<float>(sampleRate, showCw), printChars*4);
     cwDecoder[j]->setWriter(out[j]);
     outState[j] = ' ';
   }
@@ -303,12 +298,13 @@ int main(int argc, char *argv[])
       dbgOut[j] = accPower<0.5? '.' : '0' + round(fmax(fmin(accPower / maxPower * 10.0, 9.0), 0.0));
 
       // If CW input buffer can accept samples...
-      if(in[j]->writeable()>=MAX_INPUT)
+      Csdr::Ringbuffer<float> *in = cwDecoder[j]->buf();
+      if(in->writeable()>=MAX_INPUT)
       {
         // Fill input buffer with computed signal power
-        float *dst = in[j]->getWritePointer();
+        float *dst = in->getWritePointer();
         for(i=0 ; i<MAX_INPUT ; ++i) dst[i] = accPower;
-        in[j]->advance(MAX_INPUT);
+        in->advance(MAX_INPUT);
 
         // Process input for the current channel
         while(cwDecoder[j]->canProcess()) cwDecoder[j]->process();
@@ -344,13 +340,9 @@ int main(int argc, char *argv[])
     delete outReader[j];
     delete out[j];
     delete cwDecoder[j];
-    delete inReader[j];
-    delete in[j];
   }
 
   // Release CSDR object storage
-  delete [] in;
-  delete [] inReader;
   delete [] out;
   delete [] outReader;
   delete [] cwDecoder;

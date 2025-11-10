@@ -2,12 +2,16 @@ CC	:= g++
 INCDIRS	:=
 LIBDIRS	:=
 LIBS	:= -lcsdr++ -lfftw3f
-CFLAGS	:= -O1 $(INCDIRS)
+CFLAGS	:= -O3 $(INCDIRS)
+OBJECTS	:= cw-skimmer.o rtty-skimmer.o bufmodule.o
 
-all: csdr-cwskimmer
+all: csdr-cwskimmer csdr-rttyskimmer
 
-csdr-cwskimmer: skimmer.o
-	$(CC) $(CFLAGS) -o $@ $< $(LIBDIRS) $(LIBS)
+csdr-cwskimmer: cw-skimmer.o bufmodule.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LIBDIRS) $(LIBS)
+
+csdr-rttyskimmer: rtty-skimmer.o bufmodule.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LIBDIRS) $(LIBS)
 
 clean:
-	rm -f skimmer.o csdr-cwskimmer
+	rm -f $(OBJECTS) csdr-cwskimmer csdr-rttyskimmer

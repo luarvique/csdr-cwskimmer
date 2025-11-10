@@ -1,13 +1,15 @@
-Source: csdr-cwskimmer
+Source: csdr-skimmer
 Maintainer: Marat Fayzullin <luarvique@gmail.com>
 Section: hamradio
 Priority: optional
+Provides: csdr-cwskimmer
+Replaces: csdr-cwskimmer
 Rules-Requires-Root: no
 Standards-Version: 4.3.0
 Build-Depends: debhelper (>= 12), libfftw3-dev (>= 3.3), libcsdr-dev (>= 0.18.18)
 
-Package: csdr-cwskimmer
+Package: csdr-skimmer
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: CW skimmer
- Command line CW skimmer based on the CSDR signal processing library.
+Description: Bulk CW and RTTY decoders
+ Command line CW and RTTY skimmers based on the CSDR signal processing library.
